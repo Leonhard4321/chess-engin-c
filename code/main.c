@@ -5,12 +5,10 @@
 
 #define WINDOW_SIZE 1400
 
-void drawBoard(const Texture2D boardTex);
-
-typedef uint64_t bitboard;
-
 enum {COLOR_WHITE, COLOR_BLACK, COLOR_BOTH};
 enum {PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING};
+
+typedef uint64_t bitboard;
 
 typedef struct{
 
@@ -32,8 +30,19 @@ typedef struct{
         int fullmove_number;   // Incremented after Black's move
 }Position;
 
-Position startposition();
+typedef struct {
+    int selectedSquare;
+    bitboard drawPossableMoves; // Stores all the possable moves from the selectedSquare in the Bitboard format
+} MouseState;
+
+void handleMovement(MouseState *mouseState, Position *position);
 void drawPosition(Position position, Texture2D pieceTex[2][6]);
+void drawBoard(const Texture2D boardTex);
+void drawPossableMoves(MouseState mouseState);
+
+static int MousePosToSquare(Vector2 mousePosition);
+
+Position startposition();
 
 int main(void){
 
@@ -58,12 +67,17 @@ int main(void){
 
 
         Position position = startposition();
+        MouseState mouseState = {0};
+        mouseState.selectedSquare = -1;
 
         while(!(WindowShouldClose())){
+                handleMovement(&mouseState, &position);
+
                 BeginDrawing();
                         ClearBackground(RAYWHITE);
         
                         drawBoard(boardTex);  
+                        drawPossableMoves(mouseState);
                         drawPosition(position, pieceTex);
                 EndDrawing();
         }
@@ -74,6 +88,80 @@ int main(void){
         return 0;   
 }
 
+void drawPossableMoves(MouseState mouseState){
+        // Draw the highlighted square if a piece is selected 
+        if(mouseState.selectedSquare < 0) return;
+        Rectangle square;
+        square.width = (float)(WINDOW_SIZE / 8);
+        square.height = (float)(WINDOW_SIZE / 8);
+        square.x = (mouseState.selectedSquare % 8) * (WINDOW_SIZE / 8);
+        square.y = (int)((mouseState.selectedSquare) / 8) * (WINDOW_SIZE / 8);
+        DrawRectangleRec(square, Fade(GREEN, 0.5f));
+
+        // TDO: Draw the possible moves from the selected square using mouseState.drawPossableMoves bitboard
+
+}
+
+static int MousePosToSquare(Vector2 mousePosition) {
+    int x = (int)(mousePosition.x / (WINDOW_SIZE / 8));
+    int y = (int)(mousePosition.y / (WINDOW_SIZE / 8));
+    return y * 8 + x;
+}
+
+int findPieceOnPosition(int square, Position position){
+        for(int piece = 0; piece < 6; piece++){
+                for(int color = 0; color < 2; color++){
+                        if(position.pieces[color][piece] >> square & 1ULL){
+                                // we found the piece on the square
+                                return color * 6 + piece; 
+                                // return the piece index, the order is: wp, wr, wn, wb, wq, wk, bp, br, bn, bb, bq, bk       
+                        }
+                }
+        }
+        return -1; // no piece found on the square
+}
+
+void handleMovement(MouseState *mouseState, Position *position) {
+    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+
+    int square = MousePosToSquare(GetMousePosition());
+    if (square < 0) return;
+
+    if (mouseState->selectedSquare < 0) {
+        if(!(position->occupancy[COLOR_BOTH] >> square & 1ULL)){return;} 
+        mouseState->selectedSquare = square;
+        // TODO: find all the possable moves from the selectedSquare and store them in mouseState->drawPossableMoves
+    } else {
+        int targetSquare = square;
+        int piece1 = findPieceOnPosition(mouseState->selectedSquare, *position);
+        int piece2 = findPieceOnPosition(targetSquare, *position);
+
+        // update the position by moving the piece from selectedSquare to targetSquare
+        position->pieces[piece1 / 6][piece1 % 6] ^= (1ULL << mouseState->selectedSquare); 
+        // Remove the piece from the original square
+        if(piece2 != -1){
+                position->pieces[piece2 / 6][piece2 % 6] ^= (1ULL << targetSquare); 
+                // Remove the piece from the target square if there is one
+        }
+        position->pieces[piece1 / 6][piece1 % 6] ^= (1ULL << targetSquare); 
+        // Place the piece on the target square
+
+        //update the occupancy bitboards
+        position->occupancy[COLOR_BOTH] ^= (1ULL << mouseState->selectedSquare);        
+        // Remove the piece from the original square
+        position->occupancy[COLOR_BOTH] ^= (1ULL << targetSquare);                      
+        // Place the piece on the target square
+        if(piece2 != -1){
+                position->occupancy[piece2 / 6] ^= (1ULL << targetSquare); 
+                // Remove the captured piece from the occupancy
+        }
+        position->occupancy[piece1 / 6] ^= (1ULL << targetSquare); 
+        // Place the piece on the target square in the occupancy
+
+        mouseState->selectedSquare = -1;
+    }
+}
+
 void drawPosition(Position position, Texture2D pieceTex[2][6]){
         const int squareSize = WINDOW_SIZE / 8;
         Rectangle destRect = {0, 0, (float)squareSize, (float)squareSize};
@@ -82,7 +170,7 @@ void drawPosition(Position position, Texture2D pieceTex[2][6]){
         for(int piece = 0; piece < 6; piece++){
                 for(int color = 0; color < 2; color++){
                         for(int i = 0; i < 64; i++){
-                                if(position.pieces[color][piece] >> i & 0x0000000000000001){
+                                if(position.pieces[color][piece] >> i & 1ULL){
                                         const Rectangle sourceRect = {0, 0, (float)pieceTex[color][piece].width, (float)pieceTex[color][piece].height};
                                         destRect.x = (i % 8) * squareSize;
                                         destRect.y = (int)(i / 8) * squareSize;
@@ -114,6 +202,7 @@ Position startposition(){
         position.pieces[COLOR_BLACK][QUEEN] =   0x0000000000000008;
         position.pieces[COLOR_WHITE][KING] =    0x1000000000000000;
         position.pieces[COLOR_BLACK][KING] =    0x0000000000000010;
+        position.side_to_move = COLOR_WHITE;
 
         return position;
 }
