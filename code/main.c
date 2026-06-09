@@ -44,6 +44,8 @@ static int MousePosToSquare(Vector2 mousePosition);
 
 Position startposition();
 
+bitboard legalMoves(Position position, int square);
+
 int main(void){
 
         InitWindow(WINDOW_SIZE, WINDOW_SIZE, "Chess-Engin");
@@ -98,8 +100,17 @@ void drawPossableMoves(MouseState mouseState){
         square.y = (int)((mouseState.selectedSquare) / 8) * (WINDOW_SIZE / 8);
         DrawRectangleRec(square, Fade(GREEN, 0.5f));
 
-        // TDO: Draw the possible moves from the selected square using mouseState.drawPossableMoves bitboard
-
+        // Draw the possible moves from the selected square
+        for(int i = 0; i < 64; i++){
+                if(mouseState.drawPossableMoves >> i & 1ULL){
+                        Rectangle moveSquare;
+                        moveSquare.width = (float)(WINDOW_SIZE / 8);
+                        moveSquare.height = (float)(WINDOW_SIZE / 8);
+                        moveSquare.x = (i % 8) * (WINDOW_SIZE / 8);
+                        moveSquare.y = (int)(i / 8) * (WINDOW_SIZE / 8);
+                        DrawRectangleRec(moveSquare, Fade(BLUE, 0.5f));
+                }
+        }
 }
 
 static int MousePosToSquare(Vector2 mousePosition) {
@@ -128,11 +139,17 @@ void handleMovement(MouseState *mouseState, Position *position) {
     if (square < 0) return;
 
     if (mouseState->selectedSquare < 0) {
-        if(!(position->occupancy[COLOR_BOTH] >> square & 1ULL)){return;} 
+        if(!(position->occupancy[position->side_to_move] >> square & 1ULL)){return;} 
         mouseState->selectedSquare = square;
-        // TODO: find all the possable moves from the selectedSquare and store them in mouseState->drawPossableMoves
+        mouseState->drawPossableMoves = legalMoves(*position, square);
     } else {
         int targetSquare = square;
+
+        if(targetSquare == mouseState->selectedSquare){ // if the player clicks on the selected square, deselect it
+                mouseState->selectedSquare = -1;
+                return;
+        }
+
         int piece1 = findPieceOnPosition(mouseState->selectedSquare, *position);
         int piece2 = findPieceOnPosition(targetSquare, *position);
 
@@ -153,10 +170,149 @@ void handleMovement(MouseState *mouseState, Position *position) {
                 // if there is a piece on the target square, remove it from the occupancy bitboard of the opponent
                 position->occupancy[1 - position->side_to_move] &= ~(1ULL << targetSquare);
         }
-        
+
         // deselect the piece after moving
-        mouseState->selectedSquare = -1; 
+        mouseState->selectedSquare = -1;
+        position->side_to_move = 1 - position->side_to_move; // switch the side to move
     }
+}
+
+bitboard legalMoves(Position position, int square){
+        int piece = findPieceOnPosition(square, position) % 6; // get the piece type (0-5)
+        int color = findPieceOnPosition(square, position) / 6; // get the piece color (0 or 1)
+        if(piece == -1) return 0; // no piece on the square, no legal moves
+        int opponent = 1 - color;
+        int file = square % 8;
+        int rank = square / 8;
+
+        bitboard moves = 0;
+        if(piece == PAWN){
+                bitboard enemy = position.occupancy[opponent];
+
+                if(color == COLOR_WHITE){
+                        if(file > 0){
+                                int target = square - 9;
+                                if(target >= 0){
+                                        bitboard mask = 1ULL << target;
+                                        if(enemy & mask) moves |= mask;
+                                }
+                        }
+                        if(file < 7){
+                                int target = square - 7;
+                                if(target >= 0){
+                                        bitboard mask = 1ULL << target;
+                                        if(enemy & mask) moves |= mask;
+                                }
+                        }
+                        if(square >= 8 && !(position.occupancy[COLOR_BOTH] >> (square - 8) & 1ULL)){
+                                moves |= (1ULL << (square - 8));
+                                if(square >= 48 && square <= 55 && !(position.occupancy[COLOR_BOTH] >> (square - 16) & 1ULL)){
+                                        moves |= (1ULL << (square - 16));
+                                }
+                        }
+                        return moves;
+                }
+                if(color == COLOR_BLACK){
+                        if(file > 0){
+                                int target = square + 7;
+                                if(target < 64){
+                                        bitboard mask = 1ULL << target;
+                                        if(enemy & mask) moves |= mask;
+                                }
+                        }
+                        if(file < 7){
+                                int target = square + 9;
+                                if(target < 64){
+                                        bitboard mask = 1ULL << target;
+                                        if(enemy & mask) moves |= mask;
+                                }
+                        }
+                        if(square <= 55 && !(position.occupancy[COLOR_BOTH] >> (square + 8) & 1ULL)){
+                                moves |= (1ULL << (square + 8));
+                                if(square >= 8 && square <= 15 && !(position.occupancy[COLOR_BOTH] >> (square + 16) & 1ULL)){
+                                        moves |= (1ULL << (square + 16));
+                                }
+                        }
+                        return moves;
+                }
+        }
+        if(piece == ROOK){
+                for(int i = 1; i < 8; i++){
+                        if(square + i * 8 < 64){ // move up
+                                if(position.occupancy[position.side_to_move] >> (square + i * 8) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                                moves |= (1ULL << (square + i * 8));
+                                if(position.occupancy[COLOR_BOTH] >> (square + i * 8) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                        }
+                }
+                for(int i = 1; i < 8; i++){
+                        if(square - i * 8 >= 0){ // move down
+                                if(position.occupancy[position.side_to_move] >> (square - i * 8) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                                moves |= (1ULL << (square - i * 8));
+                                if(position.occupancy[COLOR_BOTH] >> (square - i * 8) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                        }
+                }
+                for(int i = 1; i < 8; i++){
+                        if((square % 8) + i < 8){ // move right
+                                if(position.occupancy[position.side_to_move] >> (square + i) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                                moves |= (1ULL << (square + i));
+                                if(position.occupancy[COLOR_BOTH] >> (square + i) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                        }
+                }                
+                for(int i = 1; i < 8; i++){
+                        if((square % 8) - i >= 0){ // move left
+                                if(position.occupancy[position.side_to_move] >> (square - i) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                                moves |= (1ULL << (square - i));
+                                if(position.occupancy[COLOR_BOTH] >> (square - i) & 1ULL){ // if there is a piece in the way, stop looking in that direction
+                                        break;
+                                }
+                        }
+                }
+                return moves;
+        }
+        if(piece == KNIGHT){
+                const int knightMoves[8] = {17, 15, 10, 6, -17, -15, -10, -6};
+                for(int i = 0; i < 8; i++){
+                        int target = square + knightMoves[i];
+                        if(target < 0 || target >= 64) continue;
+
+                        int targetFile = target % 8;
+                        int targetRank = target / 8;
+                        int fileDiff = targetFile - file;
+                        int rankDiff = targetRank - rank;
+
+                        if((abs(fileDiff) == 1 && abs(rankDiff) == 2) || (abs(fileDiff) == 2 && abs(rankDiff) == 1)){
+                                if(!(position.occupancy[position.side_to_move] >> target & 1ULL)){
+                                        moves |= (1ULL << target);
+                                }
+                        }
+                }
+                return moves;
+        }
+        if(piece == BISHOP){
+
+        }
+        if(piece == QUEEN){
+                
+        }
+        if(piece == KING){
+                
+        }
+
+        return 0x0123456789ABCDEF; // placeholder, this should be replaced with the actual legal moves for the piece on the square
 }
 
 void drawPosition(Position position, Texture2D pieceTex[2][6]){
