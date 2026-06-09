@@ -137,28 +137,25 @@ void handleMovement(MouseState *mouseState, Position *position) {
         int piece2 = findPieceOnPosition(targetSquare, *position);
 
         // update the position by moving the piece from selectedSquare to targetSquare
-        position->pieces[piece1 / 6][piece1 % 6] ^= (1ULL << mouseState->selectedSquare); 
-        // Remove the piece from the original square
+        position->pieces[piece1 / 6][piece1 % 6] &= ~(1ULL << mouseState->selectedSquare); // remove the piece from the original square
+        position->pieces[piece1 / 6][piece1 % 6] |= (1ULL << targetSquare); // place the piece on the target square
         if(piece2 != -1){
-                position->pieces[piece2 / 6][piece2 % 6] ^= (1ULL << targetSquare); 
-                // Remove the piece from the target square if there is one
+                // if there is a piece on the target square, remove it
+                position->pieces[piece2 / 6][piece2 % 6] &= ~(1ULL << targetSquare);
         }
-        position->pieces[piece1 / 6][piece1 % 6] ^= (1ULL << targetSquare); 
-        // Place the piece on the target square
 
-        //update the occupancy bitboards
-        position->occupancy[COLOR_BOTH] ^= (1ULL << mouseState->selectedSquare);        
-        // Remove the piece from the original square
-        position->occupancy[COLOR_BOTH] ^= (1ULL << targetSquare);                      
-        // Place the piece on the target square
+        // update the occupancy bitboards
+        position->occupancy[COLOR_BOTH] &= ~(1ULL << mouseState->selectedSquare); // remove the piece from the original square
+        position->occupancy[COLOR_BOTH] |= (1ULL << targetSquare); // place the piece on the target square
+        position->occupancy[position->side_to_move] &= ~(1ULL << mouseState->selectedSquare); // remove the piece from the original square
+        position->occupancy[position->side_to_move] |= (1ULL << targetSquare); // place the piece on the target square
         if(piece2 != -1){
-                position->occupancy[piece2 / 6] ^= (1ULL << targetSquare); 
-                // Remove the captured piece from the occupancy
+                // if there is a piece on the target square, remove it from the occupancy bitboard of the opponent
+                position->occupancy[1 - position->side_to_move] &= ~(1ULL << targetSquare);
         }
-        position->occupancy[piece1 / 6] ^= (1ULL << targetSquare); 
-        // Place the piece on the target square in the occupancy
-
-        mouseState->selectedSquare = -1;
+        
+        // deselect the piece after moving
+        mouseState->selectedSquare = -1; 
     }
 }
 
