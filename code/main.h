@@ -6,9 +6,18 @@
 
 #define WINDOW_SIZE 1400
 
+
+enum {PVP, PVBOT, BOTVBOT};
+#define PLAYING_STYLE PVBOT // You can choose your modes here
+// PVP:     Player vs Player
+// PVBOT:   Player vs PC
+// BOTVBOT: PC vs PC
+
+#define PLAYER_COLOR COLOR_WHITE // This is only relevent in PVBOT
+
 enum {COLOR_WHITE, COLOR_BLACK, COLOR_BOTH};
 enum {PAWN, ROOK, KNIGHT, BISHOP, QUEEN, KING};
-enum {EN_PASSANT};
+enum GameState {STATE_ONGOING, STATE_CHECK, STATE_STALEMATE, STATE_CHECKMATE, STATE_THREEFOLD};
 
 typedef uint64_t bitboard;
 
@@ -27,26 +36,31 @@ typedef struct{
         //metadata
         int side_to_move;
         int en_passant;        // square where en passant capture is possible, otherwise -1
-        int castling_rights;   // 4 bits: White King/Queen side, Black King/Queen side
+        int castling_rights;   // 4 bits: White King/Queen side, Black King/Queen side, 1 means you have the castlingright, 0 means you don't have it
         int halfmove_clock;    // For the 50-move draw rule
         int fullmove_number;   // Incremented after Black's move
 }Position;
 
 typedef struct {
     int selectedSquare;
-    int checkedSquare; // the square on which the king is being checked, if not in check then -1
     bitboard drawPossableMoves; // Stores all the possible moves from the selectedSquare in the Bitboard format
 } MouseState;
 
-void handleMovement(MouseState *mouseState, Position *position);
+Position startposition();
+
+int handleMovement(MouseState *mouseState, Position *position, int *gameState);
+int handleBot(Position *position, int *gameState, Position *positionHistory, int historyCount);
+void setupBot();
 void drawPosition(Position position, Texture2D pieceTex[2][6]);
 void drawBoard(const Texture2D boardTex);
 void drawPossableMoves(MouseState mouseState);
 
 int MousePosToSquare(Vector2 mousePosition);
-int findPieceOnPosition(int square, Position position);
-int isKingCheck(Position position);
+bitboard legalMoves(Position position, int square);
 
-Position startposition();
+Position makeMove(int selectedSquare, int targetedSquare, Position currentPosition, int promotionPiece);
+int gameState(Position position);
+
+int findPieceOnPosition(int square, Position position, int* pieceColor, int* pieceType);
 
 bitboard legalMoves(Position position, int square);

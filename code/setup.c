@@ -25,3 +25,8 @@ Position startposition(){
 
         return position;
 }
+
+void setupBot(){
+        #include <time.h>
+        srand(time(NULL));
+}

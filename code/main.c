@@ -21,14 +21,65 @@ int main(void){
         pieceTex[COLOR_BLACK][QUEEN] = LoadTexture("assets/bq.png");
         pieceTex[COLOR_BLACK][KING] = LoadTexture("assets/bk.png");
 
-
         Position position = startposition();
+        position.castling_rights = 0x0F; // all sides are allowed to castle
         MouseState mouseState = {0};
         mouseState.selectedSquare = -1;
-        mouseState.checkedSquare = -1;
+        int gameOver = 0;
+        
+        // Position history for threefold repetition
+        Position positionHistory[256];
+        int historyCount = 1;
+        positionHistory[0] = position;
+
+        if(PLAYING_STYLE != PVP){
+                setupBot();
+        }
 
         while(!(WindowShouldClose())){
-                handleMovement(&mouseState, &position);
+                int madeMove = 0;
+
+                if(PLAYING_STYLE == PVP){
+                        madeMove = handleMovement(&mouseState, &position, &gameOver);   
+                }else if(PLAYING_STYLE == PVBOT){
+                        if(position.side_to_move == PLAYER_COLOR){
+                                madeMove = handleMovement(&mouseState, &position, &gameOver); 
+                        }else{
+                                madeMove = handleBot(&position, &gameOver, positionHistory, historyCount);
+                        }
+                }else if(PLAYING_STYLE == BOTVBOT){
+
+                }
+                
+                // Check for threefold repetition after an actual move
+                if(madeMove && gameOver == STATE_ONGOING){
+                        int repetitionCount = 0;
+                        for(int i = 0; i < historyCount; i++){
+                                if(positionHistory[i].pieces[0][0] == position.pieces[0][0] &&
+                                   positionHistory[i].pieces[0][1] == position.pieces[0][1] &&
+                                   positionHistory[i].pieces[0][2] == position.pieces[0][2] &&
+                                   positionHistory[i].pieces[0][3] == position.pieces[0][3] &&
+                                   positionHistory[i].pieces[0][4] == position.pieces[0][4] &&
+                                   positionHistory[i].pieces[0][5] == position.pieces[0][5] &&
+                                   positionHistory[i].pieces[1][0] == position.pieces[1][0] &&
+                                   positionHistory[i].pieces[1][1] == position.pieces[1][1] &&
+                                   positionHistory[i].pieces[1][2] == position.pieces[1][2] &&
+                                   positionHistory[i].pieces[1][3] == position.pieces[1][3] &&
+                                   positionHistory[i].pieces[1][4] == position.pieces[1][4] &&
+                                   positionHistory[i].pieces[1][5] == position.pieces[1][5] &&
+                                   positionHistory[i].side_to_move == position.side_to_move){
+                                repetitionCount++;
+                                }
+                        }
+                        if(repetitionCount >= 3){
+                                gameOver = STATE_THREEFOLD;
+                        }
+                }
+                
+                // Add position to history after a move
+                if(madeMove && gameOver == STATE_ONGOING && historyCount < 256){
+                        positionHistory[historyCount++] = position;
+                }
 
                 BeginDrawing();
                         ClearBackground(RAYWHITE);
@@ -36,12 +87,36 @@ int main(void){
                         drawBoard(boardTex);  
                         drawPossableMoves(mouseState);
                         drawPosition(position, pieceTex);
+                        
+                        if(gameOver == STATE_CHECKMATE || gameOver == STATE_STALEMATE || gameOver == STATE_THREEFOLD){
+                                if(gameOver == STATE_STALEMATE){
+                                        DrawText("Game is a DRAW (Stalemate) - Close window to exit", 20, 20, 20, RED);
+                                }else if(gameOver == STATE_THREEFOLD){
+                                        DrawText("Game is a DRAW (Threefold Repetition) - Close window to exit", 20, 20, 20, RED);
+                                }else if(gameOver == STATE_CHECKMATE){
+                                        if(position.side_to_move == COLOR_BLACK){
+                                                DrawText("WHITE won the game - Close window to exit", 20, 20, 20, RED);
+                                        }else{
+                                                DrawText("BLACK won the game - Close window to exit", 20, 20, 20, RED);
+                                        }
+                                }
+                        }
                 EndDrawing();
         }
 
-        UnloadTexture(boardTex);
-        CloseWindow();
-
+        printf("-----------------------------\n     ");
+        if(gameOver == STATE_STALEMATE){
+                printf("   Game is a DRAW (Stalemate)\n");
+        }else if(gameOver == STATE_THREEFOLD){
+                printf("   Game is a DRAW (Threefold Repetition)\n");
+        }else if(gameOver == STATE_CHECKMATE){
+                if(position.side_to_move == COLOR_BLACK){
+                        printf("WHITE won the game\n");
+                }else{
+                        printf("BLACK won the game\n");
+                }
+        }
+        printf("-----------------------------\n");
         return 0;   
 }
 
@@ -51,14 +126,14 @@ int MousePosToSquare(Vector2 mousePosition) {
         return y * 8 + x;
 }
 
-void handleMovement(MouseState *mouseState, Position *position) {
-        if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+int handleMovement(MouseState *mouseState, Position *position, int *gameOver) {
+        if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return 0;
 
         int square = MousePosToSquare(GetMousePosition());
-        if (square < 0) return;
+        if (square < 0) return 0;
 
         if (mouseState->selectedSquare < 0) {
-                if(!(position->occupancy[position->side_to_move] >> square & 1ULL)){return;} 
+                if(!(position->occupancy[position->side_to_move] >> square & 1ULL)){return 0;} 
                 mouseState->selectedSquare = square;
                 mouseState->drawPossableMoves = legalMoves(*position, square);
         } else {
@@ -66,77 +141,46 @@ void handleMovement(MouseState *mouseState, Position *position) {
 
                 if(targetSquare == mouseState->selectedSquare){ // if the player clicks on the selected square, deselect it
                         mouseState->selectedSquare = -1;
-                        return;
+                        return 0;
                 }
                 if(!(mouseState->drawPossableMoves >> targetSquare & 1ULL)){ // if the player clicks on a square that is not a legal move, do nothing
-                        return;
+                        return 0;
                 }
 
-                int piece1 = findPieceOnPosition(mouseState->selectedSquare, *position);
-                int piece2 = findPieceOnPosition(targetSquare, *position);
 
-                // update the position by moving the piece from selectedSquare to targetSquare
-                position->pieces[piece1 / 6][piece1 % 6] &= ~(1ULL << mouseState->selectedSquare); // remove the piece from the original square
-                position->pieces[piece1 / 6][piece1 % 6] |= (1ULL << targetSquare); // place the piece on the target square
-                if(piece2 != -1){
-                        // if there is a piece on the target square, remove it
-                        position->pieces[piece2 / 6][piece2 % 6] &= ~(1ULL << targetSquare);
+                // check if the movement was a promotion
+                int selectedPieceType;
+                char promotionPieceChar;
+                int promotionPieceInt = QUEEN;
+                findPieceOnPosition(mouseState->selectedSquare, *position, NULL, &selectedPieceType);
+                int targetRank = targetSquare / 8;
+
+                int isPromotion = (selectedPieceType == PAWN) && 
+                           ((position->side_to_move == COLOR_WHITE && targetRank == 0) || 
+                            (position->side_to_move == COLOR_BLACK && targetRank == 7));
+
+                if(isPromotion){
+                        printf("select piece to promote to:\nn: knight\nb: bishop\nr: rook\nq: queen\n");
+                        scanf(" %c", &promotionPieceChar);
+                        switch(promotionPieceChar){
+                                case 'q': promotionPieceInt = QUEEN; break;
+                                case 'r': promotionPieceInt = ROOK; break;
+                                case 'b': promotionPieceInt = BISHOP; break;
+                                case 'n': promotionPieceInt = KNIGHT; break;
+                        }                         
                 }
 
-                // update the occupancy bitboards
-                position->occupancy[COLOR_BOTH] &= ~(1ULL << mouseState->selectedSquare); // remove the piece from the original square
-                position->occupancy[COLOR_BOTH] |= (1ULL << targetSquare); // place the piece on the target square
-                position->occupancy[position->side_to_move] &= ~(1ULL << mouseState->selectedSquare); // remove the piece from the original square
-                position->occupancy[position->side_to_move] |= (1ULL << targetSquare); // place the piece on the target square
-                if(piece2 != -1){
-                        // if there is a piece on the target square, remove it from the occupancy bitboard of the opponent
-                        position->occupancy[1 - position->side_to_move] &= ~(1ULL << targetSquare);
-                }
 
-                // if the player captures en passant, remove the captured pawn (only for pawn moves)
-                if(piece1 % 6 == PAWN && position->en_passant == targetSquare){ 
-                        if(position->side_to_move == COLOR_WHITE){
-                                position->pieces[COLOR_BLACK][PAWN] &= ~(1ULL << (targetSquare + 8)); 
-                                position->occupancy[COLOR_BLACK] &= ~(1ULL << (targetSquare + 8));
-                                position->occupancy[COLOR_BOTH] &= ~(1ULL << (targetSquare + 8)); 
-                        } else {
-                                position->pieces[COLOR_WHITE][PAWN] &= ~(1ULL << (targetSquare - 8)); 
-                                position->occupancy[COLOR_WHITE] &= ~(1ULL << (targetSquare - 8)); 
-                                position->occupancy[COLOR_BOTH] &= ~(1ULL << (targetSquare - 8));
-                        }
-                }
-
-                // update the en passant square if a pawn moves two squares forward and look for promotion
-                if(piece1 % 6 == PAWN){
-                        if(mouseState->selectedSquare - targetSquare == 16){
-                                // if the pawn moves two squares forward, set the en passant square
-                                position->en_passant = mouseState->selectedSquare - 8;
-                        } else if(mouseState->selectedSquare - targetSquare == -16){
-                                // if the pawn moves two squares forward, set the en passant square
-                                position->en_passant = mouseState->selectedSquare + 8;
-                        } else {
-                                // otherwise, reset the en passant square
-                                position->en_passant = -1;
-                        }
-                        if((targetSquare / 8 == 0 ) || (targetSquare / 8 == 7 )){
-                                // if the pawn reaches the last rank, promote it to a queen
-                                char promotionPieceChar;
-                                int promotionPieceInt;
-                                printf("select piece to promote to:\nn: knight\nb: bishop\nr: rook\nq: queen\n");
-                                scanf(" %c", &promotionPieceChar);
-                                switch(promotionPieceChar){
-                                        case 'q': promotionPieceInt = QUEEN; break;
-                                        case 'r': promotionPieceInt = ROOK; break;
-                                        case 'b': promotionPieceInt = BISHOP; break;
-                                        case 'n': promotionPieceInt = KNIGHT; break;
-                                }
-                                position->pieces[position->side_to_move][PAWN] &= ~(1ULL << targetSquare); // remove the pawn from the target square
-                                position->pieces[position->side_to_move][promotionPieceInt] |= (1ULL << targetSquare); // place the promoted piece on the target square
-                        }
-                }
-
+                // apply the choosen move to the position
+                *position = makeMove(mouseState->selectedSquare, targetSquare, *position, promotionPieceInt);
+                // look for a checkmate or draw
+                *gameOver = gameState(*position);
                 // deselect the piece after moving
                 mouseState->selectedSquare = -1;
-                position->side_to_move = 1 - position->side_to_move; // switch the side to move
+                return 1;
         }
+
+        return 0;
 }
+
+
