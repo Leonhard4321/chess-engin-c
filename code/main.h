@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define WINDOW_SIZE 1400
+#define WINDOW_SIZE 800
 
 
 enum {PVP, PVBOT, BOTVBOT};
