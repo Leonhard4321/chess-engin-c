@@ -1,74 +1,26 @@
-# chess-engin-c
-A graphical chess engine written in C using `raylib`.
+# main project
 
-This project includes a playable chess board, legal move generation, chess rules enforcement, and a simple engine that plays against you with adaptive search depth.
+A hobby chess engine and graphical board I built in C using raylib graphics library, `raylib`. 
 
-## Features
+I started this project to get more better with C and to learn how chess programming actually works under the hood. It features full legal move generation, all standard Chess-Rules, and a custom bot that uses negamax search with alpha-beta pruning. It is not going to beat Magnus Carlsen (the best Chessplayer alive), but it plays a solid game and will dynamically adjust its search depth based on positions to analize. 
 
-- 2D chess board rendered with `raylib`
-- Player vs Player mode
-- Player vs Computer mode
-- Move generation for all standard chess pieces
-- Pawn promotion, castling, en passant, stalemate, checkmate, and threefold repetition draw detection
-- Engine using negamax search with alpha-beta pruning and quiescence search
-- Adaptive search depth based on board complexity
+## what it features
 
-## Requirements
+- Fully playable visuals with the raylib library. 
+- Standard chess rules: Handles castling, en passant, pawn promotion, stalemate, checkmate, and threefold repetition.
+- Custom Engine: Uses negamax search with alpha-beta pruning and basic move ordering
 
-- GCC or another C compiler
-- `raylib` library installed
-- `make` command available
+## what you need
 
-## Build
+To build and run this project, you'll need:
+- Preferable a Linux system, for all other systems there might be some thinkering to be done
+- A C compiler (like GCC)
+- `raylib`  raylib installed on your system
 
-From the project root:
+## how to run
+
+From the project root directory, compile the game using:
 
 ```bash
-make start
-```
-
-This compiles the source files and produces the executable `main`.
-
-## Run
-
-After building, run:
-
-```bash
+make
 ./main
-```
-
-## Game Modes
-
-The current mode is set in `code/main.h` with the `PLAYING_STYLE` macro:
-
-- `PVP` — Player vs Player
-- `PVBOT` — Player vs Computer
-- `BOTVBOT` — Computer vs Computer
-
-You can also set `PLAYER_COLOR` in `code/main.h` to choose whether the human player uses white or black in `PVBOT` mode.
-
-## Controls
-
-- Left click to select a piece
-- Left click again to move it to a legal target square
-- Pawn promotion is selected by typing one of: `n`, `b`, `r`, or `q`
-
-## Notes
-
-- The engine chooses moves using move ordering heuristics and evaluates positions by material balance.
-- The board textures are stored in `assets/` and loaded at runtime.
-- The game window is `800x800` pixels by default, but can be adjusted, if need be.
-
-## Project Structure
-
-- `code/main.c` — main game loop and input handling
-- `code/main.h` — data structures, macros, and shared declarations
-- `code/bot.c` — engine search, evaluation, and bot move selection
-- `code/findLegalMoves.c` — legal move generation and move application
-- `code/setup.c` — position initialization and helpers
-- `code/draw.c` — rendering functions
-- `assets/` — board and piece textures
-
-## License
-
-This project is licensed under the MIT License. See `LICENSE` for details.
